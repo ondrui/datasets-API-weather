@@ -101,7 +101,7 @@ const urlHMN = `${process.env.URL_API}?lat=55.835970&lon=37.555039&type=1&period
 const insertDataToDB = (dataOM, dataHMN) => {
 
   // db table name
-  const tabName = "data_copy";
+  const tabName = "data";
 
   // Setting the timestamp in the correct format.
   const time = new Date().toISOString().slice(0, -5);
