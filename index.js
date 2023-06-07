@@ -1,8 +1,10 @@
 import fetch from "node-fetch";
-import "dotenv/config";
+import dotenv from 'dotenv';
 import { connection } from "./database.js";
 // import { CronJob } from "cron";
 // import { createConnection } from 'mysql';
+
+dotenv.config({ path: '~/projects/datasets-API-weather/.env' });
 
 // request options Open-Meteo API.
 const propertiesURL = {
@@ -98,6 +100,9 @@ const urlHMN = `${process.env.URL_API}?lat=55.835970&lon=37.555039&type=1&period
  */
 const insertDataToDB = (dataOM, dataHMN) => {
 
+  // db table name
+  const tabName = "data_copy";
+
   // Setting the timestamp in the correct format.
   const time = new Date().toISOString().slice(0, -5);
 
@@ -108,7 +113,7 @@ const insertDataToDB = (dataOM, dataHMN) => {
     Object.values(obj).forEach((value) => {
       if (typeof value === "object" && value !== null && !Array.isArray(value)) {
         const strValue = `"${time}", "${value.date.slice(0, -6)}", "hmn", ${value.temp}, NULL, NULL`;
-        const sql = `INSERT INTO data (request_time, runtime, model, temperature_2m, precipitation, weathercode) VALUES (${strValue});`;
+        const sql = `INSERT INTO ${tabName} (request_time, runtime, model, temperature_2m, precipitation, weathercode) VALUES (${strValue});`;
         connection.query(sql, function (err) {
           if (err) throw err;
           console.log("Row has been updated");
@@ -128,7 +133,7 @@ const insertDataToDB = (dataOM, dataHMN) => {
     const arrWCode = dataOM.hourly[`weathercode_${model}`];
     arrTime.forEach((str, index) => {
       const strValue = `"${str}", "${arrRunTime[index]}", "${arrModel[index]}", ${arrTemp[index]}, ${arrPrecip[index]}, ${arrWCode[index]}`;
-      const sql = `INSERT INTO data (request_time, runtime, model, temperature_2m, precipitation, weathercode) VALUES (${strValue});`;
+      const sql = `INSERT INTO ${tabName} (request_time, runtime, model, temperature_2m, precipitation, weathercode) VALUES (${strValue});`;
       connection.query(sql, function (err) {
         if (err) throw err;
         console.log("Row has been updated");

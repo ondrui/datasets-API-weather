@@ -1,5 +1,8 @@
-import 'dotenv/config';
+import dotenv from 'dotenv'
 import { createConnection } from 'mysql';
+
+dotenv.config({ path: '~/projects/datasets-API-weather/.env' });
+
 export const connection = createConnection({
   host: process.env.HOST,
   user: process.env.USER_DB,
