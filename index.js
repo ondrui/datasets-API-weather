@@ -112,7 +112,7 @@ const insertDataToDB = (dataOM, dataHMN) => {
   Object.values(forecast_1).forEach(obj => {
     Object.values(obj).forEach((value) => {
       if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-        const strValue = `"${time}", "${value.date.slice(0, -6)}", "hmn", ${value.temp}, NULL, NULL`;
+        const strValue = `"${time}", CONVERT_TZ('${value.date.slice(0, -6)}','+03:00','+00:00'), "hmn", ${value.temp}, NULL, NULL`;
         const sql = `INSERT INTO ${tabName} (request_time, runtime, model, temperature_2m, precipitation, weathercode) VALUES (${strValue});`;
         connection.query(sql, function (err) {
           if (err) throw err;
