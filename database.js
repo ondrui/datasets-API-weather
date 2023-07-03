@@ -16,3 +16,18 @@ connection.connect((err) => {
   }
   console.log('Connected to the MySQL server.')
 });
+
+export const connection1 = createConnection({
+  host: process.env.HOST_U,
+  user: process.env.USER_DB_U,
+  password: process.env.PASSWORD_DB_U,
+  database: process.env.NAME_DB_U,
+  insecureAuth: true,
+})
+connection1.connect((err) => {
+  if (err) {
+    console.log(err)
+    return
+  }
+  console.log('Connected to the MySQL U server.')
+});

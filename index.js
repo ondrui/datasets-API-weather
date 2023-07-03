@@ -1,10 +1,10 @@
 import fetch from "node-fetch";
-import dotenv from 'dotenv';
-import { connection } from "./database.js";
+import dotenv from "dotenv";
+import { connection, connection1 } from "./database.js";
 // import { CronJob } from "cron";
 // import { createConnection } from 'mysql';
 
-dotenv.config({ path: '~/projects/datasets-API-weather/.env' });
+dotenv.config({ path: "~/projects/datasets-API-weather/.env" });
 
 // request options Open-Meteo API.
 const propertiesURL = {
@@ -38,9 +38,18 @@ const modelsList = Object.keys(propertiesURL.params.models);
 const closeConnectionDb = () => {
   connection.end(function (err) {
     if (err) {
-      return console.log('error:' + err.message);
+      return console.log("error:" + err.message);
     }
-    console.log('Close the database connection.');
+    console.log("Close the database connection.");
+  });
+};
+
+const closeConnectionDbU = () => {
+  connection1.end(function (err) {
+    if (err) {
+      return console.log("error:" + err.message);
+    }
+    console.log("Close the database U connection.");
   });
 };
 
@@ -79,11 +88,13 @@ const closeConnectionDb = () => {
 //-----------------------------------------------------------------
 
 // 2. IF fetch data from single resource. Open-Meteo API.
-const urlOpenMeteo = new URL(`${propertiesURL.origin}${propertiesURL.pathname}`);
+const urlOpenMeteo = new URL(
+  `${propertiesURL.origin}${propertiesURL.pathname}`
+);
 Object.entries(propertiesURL.params).forEach(([k, v]) => {
   if (k === "models") {
-    let str = '';
-    modelsList.forEach(item => str += v[item] + ',');
+    let str = "";
+    modelsList.forEach((item) => (str += v[item] + ","));
     str.slice(0, -1);
     urlOpenMeteo.searchParams.set(k, str.slice(0, -1));
   } else {
@@ -93,15 +104,45 @@ Object.entries(propertiesURL.params).forEach(([k, v]) => {
 // HMN resource string.
 const urlHMN = `${process.env.URL_API}?lat=55.835970&lon=37.555039&type=1&period=48&mode=point&block=forecast&cid=${process.env.KEY_API}`;
 
+// Load data from our db ECMWF model. Create promise.
+const sqlU = `
+    SELECT
+    DateOt,
+    DATE_ADD(DateOt,INTERVAL dt HOUR) AS forecast_time,
+    T AS temperature_2m,
+    "ecmwf_balchug" AS model,
+    NULL AS precipitation,
+    NULL AS weathercode
+    FROM
+    model
+    WHERE
+    st_index = 27605
+    AND
+    Model = 104
+    AND
+    Level = 2001
+    ORDER BY
+    DateOt;
+    `;
+const resultU = new Promise((resolve, reject) => {
+  connection1.query(sqlU, (err, result) => {
+    if (err) {
+      reject(err);
+    } else {
+      resolve(result);
+    }
+  });
+});
+
 /**
  * Enable running queries on the database.
  * @param dataOM Data object Open-Meteo API.
  * @param dataHMN Data object HMN API.
+ * @param dataU Data array our db (alias"U").
  */
-const insertDataToDB = (dataOM, dataHMN) => {
-
+const insertDataToDB = (dataOM, dataHMN, dataU) => {
   // db table name
-  const tabName = "data";
+  const tabName = "data_copy";
 
   // Setting the timestamp in the correct format.
   const time = new Date().toISOString().slice(0, -5);
@@ -109,38 +150,55 @@ const insertDataToDB = (dataOM, dataHMN) => {
   // HMN API
   const { forecast_1 } = dataHMN;
   delete forecast_1.start_date;
-  Object.values(forecast_1).forEach(obj => {
+  Object.values(forecast_1).forEach((obj) => {
     Object.values(obj).forEach((value) => {
-      if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-        const strValue = `"${time}", CONVERT_TZ('${value.date.slice(0, -6)}','+03:00','+00:00'), "hmn", ${value.temp}, NULL, NULL`;
-        const sql = `INSERT INTO ${tabName} (request_time, runtime, model, temperature_2m, precipitation, weathercode) VALUES (${strValue});`;
+      if (
+        typeof value === "object" &&
+        value !== null &&
+        !Array.isArray(value)
+      ) {
+        const strValue = `"${time}", "${value.date}", "hmn", ${value.temp}, NULL, NULL`;
+        const sql = `INSERT INTO ${tabName} (runtime, forecast_time, model, temperature_2m, precipitation, weathercode) VALUES (${strValue});`;
         connection.query(sql, function (err) {
-          if (err) throw err;
-          console.log("Row has been updated");
+          if (err) console.log(err);
+          // console.log("Row has been updated");
         });
       }
     });
   });
 
+  // From our db ECMWF model.
+  dataU.forEach((value) => {
+    const strValue = `"${value.DateOt.toISOString().slice(0, -5)}", "${time}", "${value.forecast_time.toISOString().slice(0, -5)}", "ecmwf_balchug", ${value.temperature_2m}, NULL, NULL`;
+    const sql = `INSERT INTO ${tabName} (DateOt, runtime, forecast_time, model, temperature_2m, precipitation, weathercode) VALUES (${strValue});`;
+    connection.query(sql, function (err) {
+      if (err) console.log(err);
+      console.log("Row has been updated");
+    });
+  });
+
   // Weather Forecast API
   const models = Object.values(propertiesURL.params.models);
-  models.forEach(model => {
-    const arrTime = Array(dataOM.hourly[`temperature_2m_${model}`].length).fill(time);
-    const arrRunTime = dataOM.hourly.time;
-    const arrModel = Array(dataOM.hourly[`temperature_2m_${model}`].length).fill(model);
+  models.forEach((model) => {
+    const arrTime = Array(dataOM.hourly[`temperature_2m_${model}`].length).fill(
+      time
+    );
+    const arrForecastTime = dataOM.hourly.time;
+    const arrModel = Array(
+      dataOM.hourly[`temperature_2m_${model}`].length
+    ).fill(model);
     const arrTemp = dataOM.hourly[`temperature_2m_${model}`];
     const arrPrecip = dataOM.hourly[`precipitation_${model}`];
     const arrWCode = dataOM.hourly[`weathercode_${model}`];
     arrTime.forEach((str, index) => {
-      const strValue = `"${str}", "${arrRunTime[index]}", "${arrModel[index]}", ${arrTemp[index]}, ${arrPrecip[index]}, ${arrWCode[index]}`;
-      const sql = `INSERT INTO ${tabName} (request_time, runtime, model, temperature_2m, precipitation, weathercode) VALUES (${strValue});`;
+      const strValue = `"${str}", "${arrForecastTime[index]}", "${arrModel[index]}", ${arrTemp[index]}, ${arrPrecip[index]}, ${arrWCode[index]}`;
+      const sql = `INSERT INTO ${tabName} (runtime, forecast_time, model, temperature_2m, precipitation, weathercode) VALUES (${strValue});`;
       connection.query(sql, function (err) {
-        if (err) throw err;
-        console.log("Row has been updated");
+        if (err) console.log(err);
+        // console.log("Row has been updated");
       });
     });
   });
-
 };
 
 /**
@@ -154,11 +212,13 @@ const fetchData = async (urlOpenMeteo, urlHMN) => {
     const dataOM = await responseOM.json();
     const responseHMN = await fetch(urlHMN);
     const dataHMN = await responseHMN.json();
-    insertDataToDB(dataOM, dataHMN);
+    const dataU = await resultU;
+    insertDataToDB(dataOM, dataHMN, dataU);
   } catch (error) {
     console.error("Error! Could not reach the API or db connections. " + error);
   }
   closeConnectionDb();
+  closeConnectionDbU();
 };
 
 fetchData(urlOpenMeteo, urlHMN);
