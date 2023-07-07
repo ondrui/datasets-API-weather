@@ -1,7 +1,10 @@
-import fetch from "node-fetch";
 import dotenv from "dotenv";
+import mysql from "mysql";
 import { connectionDatasets, connectionForec } from "./database.js";
 dotenv.config({ path: "~/projects/datasets-API-weather/.env" });
+
+// db table name
+const TAB_NAME_DB = "data";
 
 // Helper Functions
 const formatedDatetime = (date) => {
@@ -55,9 +58,6 @@ const closeConnectionDbU = () => {
     console.log("Close the database U connectionDatasets.");
   });
 };
-
-// db table name
-const tabName = "data";
 
 // 1. If fetch multple resources. Open-Meteo API.
 // Build list of URL resources.
@@ -114,7 +114,7 @@ const urlHMN = `${process.env.URL_API}?lat=55.835970&lon=37.555039&type=1&period
 
 const resultU = async () => {
   //1 Находим самую последнюю (свежая) дату в поле "runtime" базы "data".
-  const sqlLastRuntimeDataDB = `SELECT runtime FROM ${tabName} WHERE model='ecmwf_balchug' ORDER BY runtime  DESC LIMIT 1`;
+  const sqlLastRuntimeDataDB = `SELECT runtime FROM ${TAB_NAME_DB} WHERE model='ecmwf_balchug' ORDER BY runtime  DESC LIMIT 1`;
 
   const [lastRuntime] = await new Promise((resolve, reject) => {
     connectionDatasets.query(sqlLastRuntimeDataDB, (err, result) => {
@@ -126,8 +126,15 @@ const resultU = async () => {
     });
   });
 
-  //2 Получаем данные из бозы "forec" таблица "model".
-  // const lastRuntimeDataDB = "2023-07-03 00:00:00";
+  // 2 Готовим строку для запроса к БД.
+  // Если "свежая" дата отсутствует, то устанавливаем дефолтную дату.
+  // Получаем данные из бозы "forec" таблица "model".
+
+  const defaultDateFresh = "0000-00-00 00:00";
+  const dateFresh = lastRuntime
+    ? formatedDatetime(lastRuntime.runtime)
+    : defaultDateFresh;
+
   const sqlU = `
     SELECT
     DateOt AS runtime,
@@ -139,7 +146,7 @@ const resultU = async () => {
     FROM
     model
     WHERE
-    DateOt > "${formatedDatetime(lastRuntime.runtime)}"
+    DateOt > ?
     AND
     st_index = 27605
     AND
@@ -149,8 +156,10 @@ const resultU = async () => {
     ORDER BY
     runtime;
     `;
+  const sqlFormated = mysql.format(sqlU, [dateFresh]);
+
   return new Promise((resolve, reject) => {
-    connectionForec.query(sqlU, (err, result) => {
+    connectionForec.query(sqlFormated, (err, result) => {
       if (err) {
         reject(err);
       } else {
@@ -168,7 +177,7 @@ const resultU = async () => {
  */
 const insertDataToDB = (dataOM, dataHMN, dataU) => {
   // Setting the timestamp in the correct format.
-  // const time = "2023-07-04 13:00:02";
+  // const time = "2023-07-07 13:00:02";
   const time = formatedDatetime(new Date());
 
   // HMN API
@@ -181,11 +190,13 @@ const insertDataToDB = (dataOM, dataHMN, dataU) => {
         value !== null &&
         !Array.isArray(value)
       ) {
-        const strValue = `"${time}", "${value.date}", "hmn", ${value.temp}, NULL, NULL`;
-        const sql = `INSERT INTO ${tabName} (request_time, forecast_time, model, temperature_2m, precipitation, weathercode) VALUES (${strValue});`;
-        connectionDatasets.query(sql, function (err) {
+        const sql = `INSERT INTO ${TAB_NAME_DB} (request_time, forecast_time, model, temperature_2m, precipitation, weathercode) VALUES (?, ?, "hmn", ?, NULL, NULL);`;
+
+        const sqlFormated = mysql.format(sql, [time, value.date, value.temp]);
+
+        connectionDatasets.query(sqlFormated, function (err) {
           if (err) console.log(err);
-          console.log("Row has been updated");
+          console.log("Row dataHMN has been updated");
         });
       }
     });
@@ -194,15 +205,18 @@ const insertDataToDB = (dataOM, dataHMN, dataU) => {
   // From our db ECMWF model.
   if (dataU.length > 0) {
     dataU.forEach((value) => {
-      const strValue = `"${formatedDatetime(
-        value.runtime
-      )}", "${time}", "${formatedDatetime(
-        value.forecast_time
-      )}", "ecmwf_balchug", ${value.temperature_2m}, NULL, NULL`;
-      const sql = `INSERT INTO ${tabName} (runtime, request_time, forecast_time, model, temperature_2m, precipitation, weathercode) VALUES (${strValue});`;
-      connectionDatasets.query(sql, function (err) {
+      const sql = `INSERT INTO ${TAB_NAME_DB} (runtime, request_time, forecast_time, model, temperature_2m, precipitation, weathercode) VALUES (?, ?, ?, "ecmwf_balchug", ?, NULL, NULL);`;
+
+      const sqlFormated = mysql.format(sql, [
+        formatedDatetime(value.runtime),
+        time,
+        formatedDatetime(value.forecast_time),
+        value.temperature_2m,
+      ]);
+
+      connectionDatasets.query(sqlFormated, function (err) {
         if (err) console.log(err);
-        console.log("Row has been updated");
+        console.log("Row ECMWF has been updated");
       });
     });
   }
@@ -221,11 +235,23 @@ const insertDataToDB = (dataOM, dataHMN, dataU) => {
     const arrPrecip = dataOM.hourly[`precipitation_${model}`];
     const arrWCode = dataOM.hourly[`weathercode_${model}`];
     arrTime.forEach((str, index) => {
-      const strValue = `"${str}", "${arrForecastTime[index]}", "${arrModel[index]}", ${arrTemp[index]}, ${arrPrecip[index]}, ${arrWCode[index]}`;
-      const sql = `INSERT INTO ${tabName} (request_time, forecast_time, model, temperature_2m, precipitation, weathercode) VALUES (${strValue});`;
-      connectionDatasets.query(sql, function (err) {
+
+      const arrValue = [
+        str,
+        arrForecastTime[index],
+        arrModel[index],
+        arrTemp[index],
+        arrPrecip[index],
+        arrWCode[index],
+      ];
+
+      const sql = `INSERT INTO ${TAB_NAME_DB} (request_time, forecast_time, model, temperature_2m, precipitation, weathercode) VALUES (?);`;
+
+      const sqlFormated = mysql.format(sql, [arrValue]);
+
+      connectionDatasets.query(sqlFormated, function (err) {
         if (err) console.log(err);
-        console.log("Row has been updated");
+        console.log("Row Weather Forecast API has been updated");
       });
     });
   });
