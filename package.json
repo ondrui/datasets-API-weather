@@ -7,7 +7,10 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint:style": "eslint --fix index.js",
+    "lint:formatting": "prettier --write index.js",
+    "lint": "npm run lint:style && npm run lint:formatting"
   },
   "keywords": [],
   "author": "",
@@ -17,6 +20,13 @@
     "mysql": "2.16.0"
   },
   "devDependencies": {
-    "nodemon": "^2.0.22"
+    "eslint": "^8.45.0",
+    "eslint-config-prettier": "^8.8.0",
+    "eslint-config-standard": "^17.1.0",
+    "eslint-plugin-import": "^2.27.5",
+    "eslint-plugin-n": "^16.0.1",
+    "eslint-plugin-promise": "^6.1.1",
+    "nodemon": "^2.0.22",
+    "prettier": "^3.0.0"
   }
 }

@@ -1,40 +1,45 @@
-import dotenv from "dotenv";
-import mysql from "mysql";
-import { connectionDatasets, connectionForec } from "./database.js";
-dotenv.config({ path: "~/projects/datasets-API-weather/.env" });
+/* eslint-disable camelcase */
+import dotenv from 'dotenv';
+import mysql from 'mysql';
+import { connectionDatasets, connectionForec } from './database.js';
+dotenv.config({ path: '~/projects/datasets-API-weather/.env' });
 
-// db table name
-const TAB_NAME_DB = "data";
-
+// db table name to insert and save data from APIs and our db
+const TAB_NAME_DB = 'data';
+/**
+ * Remove milliseconds and the suffix Z from datetime string ('.000Z').
+ * @param {string} str Date Time String. In format 'YYYY-MM-DDTHH:mm:ss.sssZ'
+ * @param {number} num default value -5.
+ * @returns
+ */
+const removeMsZ = (str, num = -5) => str.slice(0, num);
 // Helper Functions
-const formatedDatetime = (date) => {
-  if (typeof date === "string") return date.slice(0, -5);
-  return date.toISOString().slice(0, -5);
-};
+const formatedDatetime = (date) =>
+  typeof date === 'string' ? removeMsZ(date) : removeMsZ(date.toISOString());
 
 // request options Open-Meteo API.
 const propertiesURL = {
-  origin: "https://api.open-meteo.com",
-  pathname: "/v1/forecast",
+  origin: 'https://api.open-meteo.com',
+  pathname: '/v1/forecast',
   params: {
-    latitude: { name: "latitude", value: 55.836 },
-    longitude: { name: "longitude", value: 37.555 },
+    latitude: { name: 'latitude', value: 55.836 },
+    longitude: { name: 'longitude', value: 37.555 },
     hourly: {
-      name: "hourly",
-      value: "temperature_2m,precipitation,weathercode",
+      name: 'hourly',
+      value: 'temperature_2m,precipitation,weathercode',
     },
     models: {
-      MFW: "meteofrance_arpege_world",
-      MFE: "meteofrance_arpege_europe",
-      bestMatch: "best_match",
-      iconGlobal: "icon_global",
-      iconEU: "icon_eu",
-      gfsGlobal: "gfs_global",
-      gemGlobal: "gem_global",
-      ecmwfIfs04: "ecmwf_ifs04",
-      jmaGsm: "jma_gsm",
+      MFW: 'meteofrance_arpege_world',
+      MFE: 'meteofrance_arpege_europe',
+      bestMatch: 'best_match',
+      iconGlobal: 'icon_global',
+      iconEU: 'icon_eu',
+      gfsGlobal: 'gfs_global',
+      gemGlobal: 'gem_global',
+      ecmwfIfs04: 'ecmwf_ifs04',
+      jmaGsm: 'jma_gsm',
     },
-    forecast_days: { name: "forecast_days", value: 2 },
+    forecast_days: { name: 'forecast_days', value: 2 },
   },
 };
 
@@ -44,18 +49,18 @@ const modelsList = Object.keys(propertiesURL.params.models);
 const closeConnectionDb = () => {
   connectionDatasets.end(function (err) {
     if (err) {
-      return console.log("error:" + err.message);
+      return console.log('error:' + err.message);
     }
-    console.log("Close the database connectionDatasets.");
+    console.log('Close the database connectionDatasets.');
   });
 };
 
 const closeConnectionDbU = () => {
   connectionForec.end(function (err) {
     if (err) {
-      return console.log("error:" + err.message);
+      return console.log('error:' + err.message);
     }
-    console.log("Close the database U connectionDatasets.");
+    console.log('Close the database U connectionDatasets.');
   });
 };
 
@@ -91,16 +96,16 @@ const closeConnectionDbU = () => {
 // );
 // allData.forEach(obj => console.log(obj.model, obj.data));
 
-//-----------------------------------------------------------------
+// -----------------------------------------------------------------
 
 // 2. IF fetch data from single resource. Open-Meteo API.
 const urlOpenMeteo = new URL(
-  `${propertiesURL.origin}${propertiesURL.pathname}`
+  `${propertiesURL.origin}${propertiesURL.pathname}`,
 );
 Object.entries(propertiesURL.params).forEach(([k, v]) => {
-  if (k === "models") {
-    let str = "";
-    modelsList.forEach((item) => (str += v[item] + ","));
+  if (k === 'models') {
+    let str = '';
+    modelsList.forEach((item) => (str += v[item] + ','));
     str.slice(0, -1);
     urlOpenMeteo.searchParams.set(k, str.slice(0, -1));
   } else {
@@ -113,7 +118,7 @@ const urlHMN = `${process.env.URL_API}?lat=55.835970&lon=37.555039&type=1&period
 // Load data from our db ECMWF model by condition. Create query connection promise and async function.
 
 const resultU = async () => {
-  //1 Находим самую последнюю (свежая) дату в поле "runtime" базы "data".
+  // 1 Находим самую последнюю (свежая) дату в поле "runtime" базы "data".
   const sqlLastRuntimeDataDB = `SELECT runtime FROM ${TAB_NAME_DB} WHERE model='ecmwf_balchug' ORDER BY runtime  DESC LIMIT 1`;
 
   const [lastRuntime] = await new Promise((resolve, reject) => {
@@ -130,7 +135,7 @@ const resultU = async () => {
   // Если "свежая" дата отсутствует, то устанавливаем дефолтную дату.
   // Получаем данные из бозы "forec" таблица "model".
 
-  const defaultDateFresh = "0000-00-00 00:00";
+  const defaultDateFresh = '0000-00-00 00:00';
   const dateFresh = lastRuntime
     ? formatedDatetime(lastRuntime.runtime)
     : defaultDateFresh;
@@ -177,8 +182,8 @@ const resultU = async () => {
  */
 const insertDataToDB = (dataOM, dataHMN, dataU) => {
   // Setting the timestamp in the correct format.
-  // const time = "2023-07-07 13:00:02";
-  const time = formatedDatetime(new Date());
+  // const currentTime = "2023-07-19 10:00:02";
+  const currentTime = formatedDatetime(new Date());
 
   // HMN API
   const { forecast_1 } = dataHMN;
@@ -186,17 +191,21 @@ const insertDataToDB = (dataOM, dataHMN, dataU) => {
   Object.values(forecast_1).forEach((obj) => {
     Object.values(obj).forEach((value) => {
       if (
-        typeof value === "object" &&
+        typeof value === 'object' &&
         value !== null &&
         !Array.isArray(value)
       ) {
         const sql = `INSERT INTO ${TAB_NAME_DB} (request_time, forecast_time, model, temperature_2m, precipitation, weathercode) VALUES (?, ?, "hmn", ?, NULL, NULL);`;
 
-        const sqlFormated = mysql.format(sql, [time, value.date, value.temp]);
+        const sqlFormated = mysql.format(sql, [
+          currentTime,
+          value.date,
+          value.temp,
+        ]);
 
         connectionDatasets.query(sqlFormated, function (err) {
           if (err) console.log(err);
-          console.log("Row dataHMN has been updated");
+          console.log('Row dataHMN has been updated');
         });
       }
     });
@@ -209,14 +218,14 @@ const insertDataToDB = (dataOM, dataHMN, dataU) => {
 
       const sqlFormated = mysql.format(sql, [
         formatedDatetime(value.runtime),
-        time,
+        currentTime,
         formatedDatetime(value.forecast_time),
         value.temperature_2m,
       ]);
 
       connectionDatasets.query(sqlFormated, function (err) {
         if (err) console.log(err);
-        console.log("Row ECMWF has been updated");
+        console.log('Row ECMWF has been updated');
       });
     });
   }
@@ -225,17 +234,16 @@ const insertDataToDB = (dataOM, dataHMN, dataU) => {
   const models = Object.values(propertiesURL.params.models);
   models.forEach((model) => {
     const arrTime = Array(dataOM.hourly[`temperature_2m_${model}`].length).fill(
-      time
+      currentTime,
     );
-    const arrForecastTime = dataOM.hourly.time;
+    const arrForecastTime = dataOM.hourly.currentTime;
     const arrModel = Array(
-      dataOM.hourly[`temperature_2m_${model}`].length
+      dataOM.hourly[`temperature_2m_${model}`].length,
     ).fill(model);
     const arrTemp = dataOM.hourly[`temperature_2m_${model}`];
     const arrPrecip = dataOM.hourly[`precipitation_${model}`];
     const arrWCode = dataOM.hourly[`weathercode_${model}`];
     arrTime.forEach((str, index) => {
-
       const arrValue = [
         str,
         arrForecastTime[index],
@@ -251,7 +259,7 @@ const insertDataToDB = (dataOM, dataHMN, dataU) => {
 
       connectionDatasets.query(sqlFormated, function (err) {
         if (err) console.log(err);
-        console.log("Row Weather Forecast API has been updated");
+        console.log('Row Weather Forecast API has been updated');
       });
     });
   });
@@ -271,7 +279,7 @@ const fetchData = async (urlOpenMeteo, urlHMN) => {
     const dataU = await resultU();
     insertDataToDB(dataOM, dataHMN, dataU);
   } catch (error) {
-    console.error("Error! Could not reach the API or db connections. " + error);
+    console.error('Error! Could not reach the API or db connections. ' + error);
   }
   closeConnectionDb();
   closeConnectionDbU();
