@@ -236,7 +236,7 @@ const insertDataToDB = (dataOM, dataHMN, dataU) => {
     const arrTime = Array(dataOM.hourly[`temperature_2m_${model}`].length).fill(
       currentTime,
     );
-    const arrForecastTime = dataOM.hourly.currentTime;
+    const arrForecastTime = dataOM.hourly.time;
     const arrModel = Array(
       dataOM.hourly[`temperature_2m_${model}`].length,
     ).fill(model);
